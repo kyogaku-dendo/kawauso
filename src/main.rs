@@ -189,6 +189,27 @@ async fn print_tag(
     }))
 }
 
+async fn cut_paper(
+    state: actix_web::web::Data<AppState>,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    println!("\nCut paper request");
+
+    if let Err(e) = state.receipt_printer.cut_paper().await {
+        eprintln!("⚠️ Failed to cut paper: {}", e);
+        return Ok(
+            actix_web::HttpResponse::InternalServerError().json(serde_json::json!({
+                "success": false,
+                "message": format!("Failed to cut paper: {}", e),
+            })),
+        );
+    }
+
+    Ok(actix_web::HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "Paper cut command sent",
+    })))
+}
+
 async fn health_check() -> actix_web::Result<actix_web::HttpResponse> {
     Ok(actix_web::HttpResponse::Ok().json(serde_json::json!({
         "status": "ok",
@@ -212,7 +233,7 @@ async fn main() -> std::io::Result<()> {
     ));
 
     let receipt_printer = std::sync::Arc::new(receipt_printer::ReceiptPrinter::new(
-        config.printer_name.clone()
+        config.printer_name.clone(),
     ));
 
     let app_state = AppState {
@@ -231,6 +252,7 @@ async fn main() -> std::io::Result<()> {
             .route("/health", actix_web::web::get().to(health_check))
             .route("/print/pdf", actix_web::web::post().to(print_pdf))
             .route("/print/tag", actix_web::web::post().to(print_tag))
+            .route("/cut", actix_web::web::post().to(cut_paper))
     })
     .bind(bind_address)?
     .run()

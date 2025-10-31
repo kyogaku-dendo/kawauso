@@ -184,4 +184,49 @@ impl ReceiptPrinter {
 
         Ok(())
     }
+
+    // 紙詰まり時などに紙を切る
+    pub async fn cut_paper(&self) -> Result<()> {
+        tokio::fs::create_dir_all(&self.receipts_dir)
+            .await
+            .context("Failed to create receipts directory")?;
+
+        let receipt_filename = "cut.bin";
+        let receipt_path = self.receipts_dir.join(&receipt_filename);
+
+        self.generate_cut(&receipt_path)?;
+
+        self.send_to_printer(&receipt_path).await?;
+
+        println!("✓ Paper cut command sent: {}", receipt_filename);
+
+        Ok(())
+    }
+
+    fn generate_cut(&self, path: &PathBuf) -> Result<()> {
+        File::create(path).context("Failed to create cut file")?;
+        let driver = FileDriver::open(path).context("Failed to open file driver")?;
+
+        Printer::new(driver, Default::default(), Some(PrinterOptions::default()))
+            .init()
+            .context("Failed to init printer")?
+            .writeln("--- Cut Paper ---")
+            .context("Failed to write header")?
+            .writeln("")
+            .context("Failed to write newline")?
+            .writeln("")
+            .context("Failed to write newline")?
+            .writeln("")
+            .context("Failed to write newline")?
+            .writeln("")
+            .context("Failed to write newline")?
+            .writeln("")
+            .context("Failed to write newline")?
+            .writeln("")
+            .context("Failed to write newline")?
+            .print_cut()
+            .context("Failed to cut")?;
+
+        Ok(())
+    }
 }
