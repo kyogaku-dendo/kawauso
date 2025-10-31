@@ -211,9 +211,9 @@ async fn main() -> std::io::Result<()> {
         config.r2_bucket_name.clone(),
     ));
 
-    // プリンター名を環境変数から取得（デフォルトは"TM-T20"）
-    let printer_name = std::env::var("PRINTER_NAME").unwrap_or_else(|_| "TM-T20".to_string());
-    let receipt_printer = std::sync::Arc::new(receipt_printer::ReceiptPrinter::new(printer_name));
+    let receipt_printer = std::sync::Arc::new(receipt_printer::ReceiptPrinter::new(
+        config.printer_name.clone()
+    ));
 
     let app_state = AppState {
         config,
