@@ -15,4 +15,4 @@ aws-config = "1"
 anyhow = "1.0.100"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
-escpos = { version = "0.17", features = ["graphics"] }
+escpos = { version = "0.17", features = ["full"] }

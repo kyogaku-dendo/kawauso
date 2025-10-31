@@ -67,8 +67,14 @@ impl ReceiptPrinter {
             .context("Failed to init printer")?
             .justify(JustifyMode::CENTER)
             .context("Failed to set justify")?
-            .writeln("kyogaku-dendo")
-            .context("Failed to write header")?
+            .bit_image_option(
+                "./img/npo.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
             .writeln("")
             .context("Failed to write newline")?
             .writeln(&format!("フランクフルト x {}", count))
@@ -91,7 +97,7 @@ impl ReceiptPrinter {
             .context("Failed to write payment ID")?
             .writeln("")
             .context("Failed to write newline")?
-            .writeln("ありがとうございました")
+            .writeln("Thank you!")
             .context("Failed to write footer")?
             .feed()
             .context("Failed to feed")?
@@ -158,23 +164,55 @@ impl ReceiptPrinter {
             .context("Failed to init printer")?
             .justify(JustifyMode::CENTER)
             .context("Failed to set justify")?
-            .writeln("kyogaku-dendo")
-            .context("Failed to write header")?
+            .bit_image_option(
+                "./img/npo.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
             .writeln("")
             .context("Failed to write newline")?
-            .writeln("お呼び出し番号")
-            .context("Failed to write title")?
-            .writeln("")
-            .context("Failed to write newline")?
-            // TODO: 大きなフォントで番号を表示（後で調整）
+            .bit_image_option(
+                "./img/callnumber.png",
+                escpos::utils::BitImageOption::new(
+                    Some(400),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .size(2, 3)?
             .writeln(&format!("[ {} ]", tag))
             .context("Failed to write tag")?
             .writeln("")
             .context("Failed to write newline")?
-            .writeln(&format!("Order: {}", &order_id[..8]))
-            .context("Failed to write order ID")?
             .writeln("")
             .context("Failed to write newline")?
+            .bit_image_option(
+                "./img/orders.png",
+                escpos::utils::BitImageOption::new(
+                    Some(400),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/qr-instruction.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/signage.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
             .writeln("しばらくお待ちください")
             .context("Failed to write footer")?
             .feed()

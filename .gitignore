@@ -4,3 +4,4 @@ cert/
 *.pdf
 signed_pdf/
 receipts/
+.DS_Store
