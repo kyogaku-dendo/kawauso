@@ -68,7 +68,12 @@ async fn print_pdf(
 
     for i in 0..req.count {
         let pdf_id = uuid::Uuid::new_v4();
-        println!("\n[{}/{}] Processing PDF with ID: {}", i + 1, req.count, pdf_id);
+        println!(
+            "\n[{}/{}] Processing PDF with ID: {}",
+            i + 1,
+            req.count,
+            pdf_id
+        );
 
         let signed_pdf = state
             .pdf_handler
@@ -82,7 +87,12 @@ async fn print_pdf(
                 ))
             })?;
 
-        let local_path = format!("signed_{}.pdf", pdf_id);
+        tokio::fs::create_dir_all("signed_pdf").await.map_err(|e| {
+            eprintln!("Failed to create signed_pdf directory: {}", e);
+            actix_web::error::ErrorInternalServerError(format!("failed to create directory: {}", e))
+        })?;
+
+        let local_path = format!("signed_pdf/{}.pdf", pdf_id);
         println!("Saving signed PDF locally: {}", local_path);
         tokio::fs::write(&local_path, &signed_pdf)
             .await
@@ -116,10 +126,7 @@ async fn print_pdf(
         });
     }
 
-    println!(
-        "\nTODO: Print {} QR code receipts (one per PDF)",
-        req.count
-    );
+    println!("\nTODO: Print {} QR code receipts (one per PDF)", req.count);
 
     Ok(actix_web::HttpResponse::Ok().json(PrintPdfResponse {
         success: true,
@@ -145,7 +152,10 @@ async fn print_tag(
 
     Ok(actix_web::HttpResponse::Ok().json(PrintTagResponse {
         success: true,
-        message: format!("Tag print job queued: {} (order: {})", req.tag, req.order_id),
+        message: format!(
+            "Tag print job queued: {} (order: {})",
+            req.tag, req.order_id
+        ),
     }))
 }
 
