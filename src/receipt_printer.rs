@@ -175,6 +175,14 @@ impl ReceiptPrinter {
             .writeln("")
             .context("Failed to write newline")?
             .bit_image_option(
+                "./img/book_receipt.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
                 "./img/callnumber.png",
                 escpos::utils::BitImageOption::new(
                     Some(400),
@@ -209,6 +217,22 @@ impl ReceiptPrinter {
                 "./img/signage.png",
                 escpos::utils::BitImageOption::new(
                     Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/drink.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/date.png",
+                escpos::utils::BitImageOption::new(
+                    Some(200),
                     None,
                     escpos::utils::BitImageSize::Normal,
                 )?,
