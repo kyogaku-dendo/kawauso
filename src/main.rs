@@ -23,8 +23,6 @@ struct PrintPdfRequest {
 #[derive(serde::Deserialize)]
 struct PrintTagRequest {
     tag: String,
-    #[serde(rename = "orderId")]
-    order_id: uuid::Uuid,
 }
 
 #[derive(serde::Serialize)]
@@ -134,6 +132,7 @@ async fn print_pdf(
                 &pdf_url,
                 &pdf_id.to_string(),
                 &req.payment_id.to_string(),
+                req.paid_at,
                 req.count,
             )
             .await
@@ -160,17 +159,10 @@ async fn print_tag(
     state: actix_web::web::Data<AppState>,
     req: actix_web::web::Json<PrintTagRequest>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    println!(
-        "\nPrint tag request - Order ID: {}, Tag: {}",
-        req.order_id, req.tag
-    );
+    println!("\nPrint tag request - Tag: {}", req.tag);
 
     // 呼び出し番号タグを印刷
-    if let Err(e) = state
-        .receipt_printer
-        .print_tag_receipt(&req.tag, &req.order_id.to_string())
-        .await
-    {
+    if let Err(e) = state.receipt_printer.print_tag_receipt(&req.tag).await {
         eprintln!("⚠️ Failed to print tag: {}", e);
         return Ok(
             actix_web::HttpResponse::InternalServerError().json(PrintTagResponse {
@@ -182,10 +174,7 @@ async fn print_tag(
 
     Ok(actix_web::HttpResponse::Ok().json(PrintTagResponse {
         success: true,
-        message: format!(
-            "Tag print job queued: {} (order: {})",
-            req.tag, req.order_id
-        ),
+        message: format!("Tag print job queued: {}", req.tag),
     }))
 }
 

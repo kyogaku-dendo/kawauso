@@ -12,7 +12,8 @@ impl Config {
             base_pdf_path: std::env::var("BASE_PDF_PATH")?,
             r2_bucket_name: std::env::var("R2_BUCKET_NAME")?,
             r2_public_url: std::env::var("R2_PUBLIC_URL")?,
-            printer_name: std::env::var("PRINTER_NAME").unwrap_or_else(|_| "kyogaku-printer".to_string()),
+            printer_name: std::env::var("PRINTER_NAME")
+                .unwrap_or_else(|_| "kyogaku-printer".to_string()),
         })
     }
 }

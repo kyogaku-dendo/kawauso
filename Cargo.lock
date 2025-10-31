@@ -2096,6 +2096,7 @@ dependencies = [
  "anyhow",
  "aws-config",
  "aws-sdk-s3",
+ "chrono",
  "dotenvy",
  "escpos",
  "pdf_signing",

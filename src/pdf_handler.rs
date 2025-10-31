@@ -59,17 +59,14 @@ impl PdfHandler {
 
         let doc = pdf_doc.get_prev_document_ref();
 
-        if let Ok(catalog) = doc.catalog() {
-            if let Ok(acro_form) = catalog.get(b"AcroForm") {
-                if let Ok(acro_form_dict) = acro_form.as_dict() {
-                    if let Ok(fields) = acro_form_dict.get(b"Fields") {
-                        if let Ok(fields_array) = fields.as_array() {
-                            // 署名フィールドが存在するか確認
-                            return Ok(!fields_array.is_empty());
-                        }
-                    }
-                }
-            }
+        if let Ok(catalog) = doc.catalog()
+            && let Ok(acro_form) = catalog.get(b"AcroForm")
+            && let Ok(acro_form_dict) = acro_form.as_dict()
+            && let Ok(fields) = acro_form_dict.get(b"Fields")
+            && let Ok(fields_array) = fields.as_array()
+        {
+            // 署名フィールドが存在するか確認
+            return Ok(!fields_array.is_empty());
         }
 
         Ok(false)
