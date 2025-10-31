@@ -1,75 +1,152 @@
 use anyhow::Context as _;
 
-pub struct PdfHandler {
-    client: reqwest::Client,
-}
+pub struct PdfHandler;
 
 impl PdfHandler {
     pub fn new() -> Self {
-        Self {
-            client: reqwest::Client::new(),
-        }
+        Self
     }
 
-    pub async fn fetch_base_pdf(&self, url: &str) -> anyhow::Result<Vec<u8>> {
-        // let response = self
-        //     .client
-        //     .get(url)
-        //     .send()
-        //     .await
-        //     .context("failed to download PDF")?;
-
-        // if !response.status().is_success() {
-        //     anyhow::bail!("failed to download PDF: {}", response.status());
-        // }
-
-        // let bytes = response
-        //     .bytes()
-        //     .await
-        //     .context("failed to read PDF data")?
-        //     .to_vec();
-
-        let bytes = tokio::fs::read("sample.pdf")
+    pub async fn fetch_base_pdf(&self, path: &str) -> anyhow::Result<Vec<u8>> {
+        let bytes = tokio::fs::read(path)
             .await
-            .context("failed to read sample PDF")?;
+            .context(format!("failed to read PDF from path: {}", path))?;
 
         Ok(bytes)
+    }
+
+    fn add_signature_field_to_pdf(&self, pdf_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let input_temp_path = format!("/tmp/input_pdf_{}.pdf", uuid::Uuid::new_v4());
+        let output_temp_path = format!("/tmp/output_pdf_{}.pdf", uuid::Uuid::new_v4());
+
+        std::fs::write(&input_temp_path, pdf_data).context("Failed to write input temp PDF")?;
+
+        let result = std::process::Command::new("python3")
+            .arg("add_sigfield_pikepdf.py")
+            .arg(&input_temp_path)
+            .arg(&output_temp_path)
+            .output()
+            .context("Failed to run pikepdf script")?;
+
+        if !result.status.success() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            eprintln!("pikepdf script failed:");
+            eprintln!("stdout: {}", stdout);
+            eprintln!("stderr: {}", stderr);
+
+            let _ = std::fs::remove_file(&input_temp_path);
+            let _ = std::fs::remove_file(&output_temp_path);
+
+            return Err(anyhow::anyhow!("Failed to add signature field: {}", stderr));
+        }
+
+        let output = std::fs::read(&output_temp_path).context("Failed to read output PDF")?;
+
+        let _ = std::fs::remove_file(&input_temp_path);
+        let _ = std::fs::remove_file(&output_temp_path);
+
+        Ok(output)
+    }
+
+    fn has_signature_fields(&self, pdf_data: &[u8], pdf_name: &str) -> anyhow::Result<bool> {
+        let pdf_doc = pdf_signing::PDFSigningDocument::read_from(pdf_data, pdf_name.to_string())
+            .map_err(|_| anyhow::anyhow!("Failed to read PDF"))?;
+
+        let doc = pdf_doc.get_prev_document_ref();
+
+        if let Ok(catalog) = doc.catalog() {
+            if catalog.get(b"AcroForm").is_ok() {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
     }
 
     pub async fn sign_pdf(
         &self,
         pdf_data: Vec<u8>,
         pdf_id: &uuid::Uuid,
+        base_pdf_path: &str,
     ) -> anyhow::Result<Vec<u8>> {
-        let cert =
-            std::fs::read_to_string("cert/cert.crt").context("failed to read certificate")?;
-        let private_key_data =
-            std::fs::read_to_string("cert/key.pem").context("failed to read private key")?;
+        let pdf_name = std::path::Path::new(base_pdf_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("base.pdf");
+        println!("🖋  Signing PDF: {}", pdf_name);
 
-        let x509_cert = x509_certificate::CapturedX509Certificate::from_pem(cert)
-            .context("failed to parse certificate")?;
-        let private_key =
-            x509_certificate::InMemorySigningKeyPair::from_pkcs8_pem(&private_key_data)
-                .context("failed to parse private key")?;
+        // 署名フィールドがない場合は追加
+        let pdf_with_field = if !self.has_signature_fields(&pdf_data, pdf_name)? {
+            self.add_signature_field_to_pdf(&pdf_data)?
+        } else {
+            pdf_data
+        };
 
-        let signer = cryptographic_message_syntax::SignerBuilder::new(&private_key, x509_cert);
+        // 一時ファイルに保存
+        let input_temp_path = format!("/tmp/input_{}.pdf", pdf_id);
+        let output_temp_path = format!("/tmp/signed_{}.pdf", pdf_id);
 
-        let mut pdf_doc =
-            pdf_signing::PDFSigningDocument::read_from(&*pdf_data, format!("base_{}.pdf", pdf_id))
-                .map_err(|e| anyhow::anyhow!("failed to read PDF: {:?}", e))?;
+        std::fs::write(&input_temp_path, &pdf_with_field)
+            .context("Failed to write input temp PDF")?;
 
-        let user_signature_info = vec![pdf_signing::UserSignatureInfo {
-            user_id: pdf_id.to_string(),
-            user_name: "Kyogaku no dendo".to_owned(),
-            user_email: "kawauso@kyogaku.example.com".to_owned(),
-            user_signature: vec![],
-            user_signing_keys: signer,
-        }];
+        // 署名
+        let result = std::process::Command::new("python3")
+            .arg("sign_pdf_pyhanko.py")
+            .arg(&input_temp_path)
+            .arg(&output_temp_path)
+            .arg("cert/cert.crt")
+            .arg("cert/key.pem")
+            .arg("KyogakuDendoSignature")
+            .arg(pdf_id.to_string()) // UUIDをreasonフィールドに記録
+            .output()
+            .context("Failed to run pyhanko signing script")?;
 
-        let signed_pdf = pdf_doc
-            .sign_document(user_signature_info)
-            .map_err(|e| anyhow::anyhow!("failed to sign PDF: {:?}", e))?;
+        if !result.status.success() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
+            let stdout = String::from_utf8_lossy(&result.stdout);
+            eprintln!("pyhanko signing failed:");
+            eprintln!("stdout: {}", stdout);
+            eprintln!("stderr: {}", stderr);
+
+            // クリーンアップ
+            let _ = std::fs::remove_file(&input_temp_path);
+            let _ = std::fs::remove_file(&output_temp_path);
+
+            return Err(anyhow::anyhow!(
+                "Failed to sign PDF with pyhanko: {}",
+                stderr
+            ));
+        }
+
+        println!("Successfully signed PDF");
+
+        let signed_pdf = std::fs::read(&output_temp_path).context("Failed to read signed PDF")?;
+
+        println!("🔍 Verifying signature...");
+        let verify_result = std::process::Command::new("pdfsig")
+            .arg(&output_temp_path)
+            .output();
+
+        match verify_result {
+            Ok(verify_output) => {
+                let stdout = String::from_utf8_lossy(&verify_output.stdout);
+                println!("pdfsig output:\n{}", stdout);
+            }
+            Err(e) => {
+                println!("⚠️  Failed to run pdfsig: {}", e);
+            }
+        }
+
+        let _ = std::fs::remove_file(&input_temp_path);
+        let _ = std::fs::remove_file(&output_temp_path);
 
         Ok(signed_pdf)
+    }
+}
+
+impl Default for PdfHandler {
+    fn default() -> Self {
+        Self::new()
     }
 }

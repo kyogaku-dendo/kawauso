@@ -14,6 +14,11 @@ impl R2Client {
     }
 
     pub async fn upload_pdf(&self, object_key: &str, pdf_data: Vec<u8>) -> anyhow::Result<()> {
+        println!("☁️  Uploading PDF to R2...");
+        println!("   Bucket: {}", self.bucket_name);
+        println!("   Key: {}", object_key);
+        println!("   Size: {} bytes", pdf_data.len());
+
         let body = aws_sdk_s3::primitives::ByteStream::from(pdf_data);
 
         self.client
@@ -26,6 +31,7 @@ impl R2Client {
             .await
             .context("failed to upload PDF to R2")?;
 
+        println!("Successfully uploaded to R2");
         Ok(())
     }
 }
