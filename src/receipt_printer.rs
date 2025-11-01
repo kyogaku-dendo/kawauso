@@ -75,9 +75,9 @@ impl ReceiptPrinter {
         .context("Failed to set justify")?
         .size(1, 1)?
         .bit_image_option(
-            "./img/npo.png",
+            "./img/npo_top.png",
             escpos::utils::BitImageOption::new(
-                Some(600),
+                Some(400),
                 None,
                 escpos::utils::BitImageSize::Normal,
             )?,
@@ -104,12 +104,26 @@ impl ReceiptPrinter {
                 escpos::utils::BitImageSize::Normal,
             )?,
         )?
-        .writeln("")
-        .context("Failed to write newline")?
+        .bit_image_option(
+            "./img/white.png",
+            escpos::utils::BitImageOption::new(
+                Some(400),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .writeln(&format!("PDF ID: {}", &pdf_id[..8]))
         .context("Failed to write PDF ID")?
         .writeln(&format!("Payment ID: {}", &payment_id[..8]))
         .context("Failed to write payment ID")?
+        .bit_image_option(
+            "./img/white.png",
+            escpos::utils::BitImageOption::new(
+                Some(400),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .bit_image_option(
             "./img/date.png",
             escpos::utils::BitImageOption::new(
@@ -120,8 +134,6 @@ impl ReceiptPrinter {
         )?
         .writeln(&paid_at_display)
         .context("Failed to write paid at")?
-        .writeln("")
-        .context("Failed to write newline")?
         .writeln("Thank you!")
         .context("Failed to write footer")?
         .feed()
@@ -192,32 +204,52 @@ impl ReceiptPrinter {
         .justify(escpos::utils::JustifyMode::CENTER)
         .context("Failed to set justify")?
         .bit_image_option(
-            "./img/npo.png",
+            "./img/npo_top.png",
             escpos::utils::BitImageOption::new(
-                Some(600),
+                Some(400),
                 None,
                 escpos::utils::BitImageSize::Normal,
             )?,
         )?
-        .writeln("")
-        .context("Failed to write newline")?
+        .bit_image_option(
+            "./img/white.png",
+            escpos::utils::BitImageOption::new(
+                Some(640),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .bit_image_option(
             "./img/callnumber.png",
             escpos::utils::BitImageOption::new(
-                Some(400),
+                Some(320),
                 None,
                 escpos::utils::BitImageSize::Normal,
             )?,
         )?
-        .size(2, 3)?
+        .bit_image_option(
+            "./img/white.png",
+            escpos::utils::BitImageOption::new(
+                Some(480),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
+        .size(3, 4)?
         .writeln(&format!("[ {} ]", tag))
         .context("Failed to write tag")?
-        .feeds(5)
-        .context("Failed to feed")?
+        .bit_image_option(
+            "./img/white.png",
+            escpos::utils::BitImageOption::new(
+                Some(480),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .bit_image_option(
             "./img/orders.png",
             escpos::utils::BitImageOption::new(
-                Some(400),
+                Some(320),
                 None,
                 escpos::utils::BitImageSize::Normal,
             )?,
