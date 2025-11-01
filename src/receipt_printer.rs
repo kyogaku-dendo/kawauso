@@ -53,10 +53,8 @@ impl ReceiptPrinter {
         paid_at: u64,
         count: u32,
     ) -> anyhow::Result<()> {
-        // ファイルを作成
         std::fs::File::create(path).context("Failed to create receipt file")?;
 
-        // ESC/POSドライバを初期化
         let driver =
             escpos::driver::FileDriver::open(path).context("Failed to open file driver")?;
 
@@ -75,6 +73,7 @@ impl ReceiptPrinter {
         .context("Failed to init printer")?
         .justify(escpos::utils::JustifyMode::CENTER)
         .context("Failed to set justify")?
+        .size(1, 1)?
         .bit_image_option(
             "./img/npo.png",
             escpos::utils::BitImageOption::new(
@@ -83,26 +82,42 @@ impl ReceiptPrinter {
                 escpos::utils::BitImageSize::Normal,
             )?,
         )?
+        .bit_image_option(
+            "./img/book_receipt.png",
+            escpos::utils::BitImageOption::new(
+                Some(600),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .writeln("")
         .context("Failed to write newline")?
-        .writeln(&format!("フランクフルト x {}", count))
-        .context("Failed to write item")?
-        .writeln("")
-        .context("Failed to write newline")?
-        .writeln("同人誌PDF")
-        .context("Failed to write description")?
-        .writeln("下記のQRコードをスキャン")
-        .context("Failed to write instruction")?
         .writeln("")
         .context("Failed to write newline")?
         .qrcode(pdf_url)
         .context("Failed to write QR code")?
+        .bit_image_option(
+            "./img/qr-instruction.png",
+            escpos::utils::BitImageOption::new(
+                Some(600),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .writeln("")
         .context("Failed to write newline")?
         .writeln(&format!("PDF ID: {}", &pdf_id[..8]))
         .context("Failed to write PDF ID")?
-        .writeln(&format!("Payment: {}", &payment_id[..8]))
+        .writeln(&format!("Payment ID: {}", &payment_id[..8]))
         .context("Failed to write payment ID")?
+        .bit_image_option(
+            "./img/date.png",
+            escpos::utils::BitImageOption::new(
+                Some(200),
+                None,
+                escpos::utils::BitImageSize::Normal,
+            )?,
+        )?
         .writeln(&paid_at_display)
         .context("Failed to write paid at")?
         .writeln("")
@@ -117,10 +132,7 @@ impl ReceiptPrinter {
         Ok(())
     }
 
-    /// lprコマンドで印刷ジョブを送信
     async fn send_to_printer(&self, receipt_path: &std::path::PathBuf) -> anyhow::Result<()> {
-        println!("📤 Sending to printer: {}", self.printer_name);
-
         let output = tokio::process::Command::new("lpr")
             .arg("-P")
             .arg(&self.printer_name)
@@ -190,14 +202,6 @@ impl ReceiptPrinter {
         .writeln("")
         .context("Failed to write newline")?
         .bit_image_option(
-            "./img/book_receipt.png",
-            escpos::utils::BitImageOption::new(
-                Some(600),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
             "./img/callnumber.png",
             escpos::utils::BitImageOption::new(
                 Some(400),
@@ -208,22 +212,12 @@ impl ReceiptPrinter {
         .size(2, 3)?
         .writeln(&format!("[ {} ]", tag))
         .context("Failed to write tag")?
-        .writeln("")
-        .context("Failed to write newline")?
-        .writeln("")
-        .context("Failed to write newline")?
+        .feeds(5)
+        .context("Failed to feed")?
         .bit_image_option(
             "./img/orders.png",
             escpos::utils::BitImageOption::new(
                 Some(400),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/qr-instruction.png",
-            escpos::utils::BitImageOption::new(
-                Some(600),
                 None,
                 escpos::utils::BitImageSize::Normal,
             )?,
@@ -244,16 +238,6 @@ impl ReceiptPrinter {
                 escpos::utils::BitImageSize::Normal,
             )?,
         )?
-        .bit_image_option(
-            "./img/date.png",
-            escpos::utils::BitImageOption::new(
-                Some(200),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .writeln("しばらくお待ちください")
-        .context("Failed to write footer")?
         .feed()
         .context("Failed to feed")?
         .print_cut()
