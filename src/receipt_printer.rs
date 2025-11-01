@@ -1,8 +1,5 @@
 use anyhow::Context as _;
 use chrono::TimeZone as _;
-// use escpos::{
-//     driver::FileDriver, printer::Printer, printer_options::PrinterOptions, utils::JustifyMode,
-// };
 
 pub struct ReceiptPrinter {
     printer_name: String,

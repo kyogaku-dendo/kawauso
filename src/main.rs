@@ -232,11 +232,18 @@ async fn main() -> std::io::Result<()> {
         receipt_printer,
     };
 
-    let bind_address = "127.0.0.1:8080";
+    let bind_address = "0.0.0.0:8080";
     println!("Starting server at: http://{}", bind_address);
 
     actix_web::HttpServer::new(move || {
+        let cors = actix_cors::Cors::default()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
+            .max_age(3600);
+
         actix_web::App::new()
+            .wrap(cors)
             .app_data(actix_web::web::Data::new(app_state.clone()))
             .route("/health", actix_web::web::get().to(health_check))
             .route("/print/pdf", actix_web::web::post().to(print_pdf))
