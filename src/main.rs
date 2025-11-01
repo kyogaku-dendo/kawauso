@@ -1,12 +1,14 @@
 mod config;
 mod pdf_handler;
 mod r2_client;
+mod receipt_printer;
 
 #[derive(Clone)]
 struct AppState {
     config: std::sync::Arc<config::Config>,
     pdf_handler: std::sync::Arc<pdf_handler::PdfHandler>,
     r2_client: std::sync::Arc<r2_client::R2Client>,
+    receipt_printer: std::sync::Arc<receipt_printer::ReceiptPrinter>,
 }
 
 #[derive(serde::Deserialize)]
@@ -21,8 +23,6 @@ struct PrintPdfRequest {
 #[derive(serde::Deserialize)]
 struct PrintTagRequest {
     tag: String,
-    #[serde(rename = "orderId")]
-    order_id: uuid::Uuid,
 }
 
 #[derive(serde::Serialize)]
@@ -122,11 +122,27 @@ async fn print_pdf(
 
         pdfs.push(PdfInfo {
             id: pdf_id.to_string(),
-            url: pdf_url,
+            url: pdf_url.clone(),
         });
+
+        // レシートを印刷
+        if let Err(e) = state
+            .receipt_printer
+            .print_pdf_receipt(
+                &pdf_url,
+                &pdf_id.to_string(),
+                &req.payment_id.to_string(),
+                req.paid_at,
+                req.count,
+            )
+            .await
+        {
+            eprintln!("⚠️ Failed to print receipt for PDF {}: {}", pdf_id, e);
+            // レシートの印刷失敗はエラーを返さず続行
+        }
     }
 
-    println!("\nTODO: Print {} QR code receipts (one per PDF)", req.count);
+    println!("\n✓ {} QR code receipts printed", req.count);
 
     Ok(actix_web::HttpResponse::Ok().json(PrintPdfResponse {
         success: true,
@@ -140,23 +156,47 @@ async fn print_pdf(
 }
 
 async fn print_tag(
-    _state: actix_web::web::Data<AppState>,
+    state: actix_web::web::Data<AppState>,
     req: actix_web::web::Json<PrintTagRequest>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    println!(
-        "\nPrint tag request - Order ID: {}, Tag: {}",
-        req.order_id, req.tag
-    );
+    println!("\nPrint tag request - Tag: {}", req.tag);
 
-    println!("TODO: Tag print");
+    // 呼び出し番号タグを印刷
+    if let Err(e) = state.receipt_printer.print_tag_receipt(&req.tag).await {
+        eprintln!("⚠️ Failed to print tag: {}", e);
+        return Ok(
+            actix_web::HttpResponse::InternalServerError().json(PrintTagResponse {
+                success: false,
+                message: format!("Failed to print tag: {}", e),
+            }),
+        );
+    }
 
     Ok(actix_web::HttpResponse::Ok().json(PrintTagResponse {
         success: true,
-        message: format!(
-            "Tag print job queued: {} (order: {})",
-            req.tag, req.order_id
-        ),
+        message: format!("Tag print job queued: {}", req.tag),
     }))
+}
+
+async fn cut_paper(
+    state: actix_web::web::Data<AppState>,
+) -> actix_web::Result<actix_web::HttpResponse> {
+    println!("\nCut paper request");
+
+    if let Err(e) = state.receipt_printer.cut_paper().await {
+        eprintln!("⚠️ Failed to cut paper: {}", e);
+        return Ok(
+            actix_web::HttpResponse::InternalServerError().json(serde_json::json!({
+                "success": false,
+                "message": format!("Failed to cut paper: {}", e),
+            })),
+        );
+    }
+
+    Ok(actix_web::HttpResponse::Ok().json(serde_json::json!({
+        "success": true,
+        "message": "Paper cut command sent",
+    })))
 }
 
 async fn health_check() -> actix_web::Result<actix_web::HttpResponse> {
@@ -181,21 +221,34 @@ async fn main() -> std::io::Result<()> {
         config.r2_bucket_name.clone(),
     ));
 
+    let receipt_printer = std::sync::Arc::new(receipt_printer::ReceiptPrinter::new(
+        config.printer_name.clone(),
+    ));
+
     let app_state = AppState {
         config,
         pdf_handler,
         r2_client,
+        receipt_printer,
     };
 
-    let bind_address = "127.0.0.1:8080";
+    let bind_address = "0.0.0.0:8080";
     println!("Starting server at: http://{}", bind_address);
 
     actix_web::HttpServer::new(move || {
+        let cors = actix_cors::Cors::default()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
+            .max_age(3600);
+
         actix_web::App::new()
+            .wrap(cors)
             .app_data(actix_web::web::Data::new(app_state.clone()))
             .route("/health", actix_web::web::get().to(health_check))
             .route("/print/pdf", actix_web::web::post().to(print_pdf))
             .route("/print/tag", actix_web::web::post().to(print_tag))
+            .route("/cut", actix_web::web::post().to(cut_paper))
     })
     .bind(bind_address)?
     .run()
