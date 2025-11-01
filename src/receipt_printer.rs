@@ -21,7 +21,7 @@ impl ReceiptPrinter {
         pdf_id: &str,
         payment_id: &str,
         paid_at: u64,
-        count: u32,
+        _count: u32,
     ) -> anyhow::Result<()> {
         // receiptsディレクトリを作成
         tokio::fs::create_dir_all(&self.receipts_dir)
@@ -33,7 +33,7 @@ impl ReceiptPrinter {
         let receipt_path = self.receipts_dir.join(&receipt_filename);
 
         // ESC/POSコマンドを生成
-        self.generate_receipt(&receipt_path, pdf_url, pdf_id, payment_id, paid_at, count)?;
+        self.generate_receipt(&receipt_path, pdf_url, pdf_id, payment_id, paid_at, _count)?;
 
         // lprコマンドで印刷ジョブをキューイング
         self.send_to_printer(&receipt_path).await?;
@@ -51,7 +51,7 @@ impl ReceiptPrinter {
         pdf_id: &str,
         payment_id: &str,
         paid_at: u64,
-        count: u32,
+        _count: u32,
     ) -> anyhow::Result<()> {
         std::fs::File::create(path).context("Failed to create receipt file")?;
 
@@ -162,8 +162,16 @@ impl ReceiptPrinter {
         Ok(())
     }
 
-    /// 呼び出し番号タグを印刷
-    pub async fn print_tag_receipt(&self, tag: &str) -> anyhow::Result<()> {
+    /// 呼び出し番号タグを印刷（品目情報付き）
+    pub async fn print_tag_receipt(
+        &self,
+        tag: &str,
+        ff_ketchup: u32,
+        ff_no_ketchup: u32,
+        book: u32,
+        pdf_book: u32,
+        drink: u32,
+    ) -> anyhow::Result<()> {
         // receiptsディレクトリを作成
         tokio::fs::create_dir_all(&self.receipts_dir)
             .await
@@ -174,7 +182,15 @@ impl ReceiptPrinter {
         let receipt_path = self.receipts_dir.join(&receipt_filename);
 
         // ESC/POSコマンドを生成
-        self.generate_tag(&receipt_path, tag)?;
+        self.generate_tag(
+            &receipt_path,
+            tag,
+            ff_ketchup,
+            ff_no_ketchup,
+            book,
+            pdf_book,
+            drink,
+        )?;
 
         // lprコマンドで印刷ジョブをキューイング
         self.send_to_printer(&receipt_path).await?;
@@ -184,8 +200,17 @@ impl ReceiptPrinter {
         Ok(())
     }
 
-    /// 呼び出し番号タグのESC/POSコマンドを生成
-    fn generate_tag(&self, path: &std::path::PathBuf, tag: &str) -> anyhow::Result<()> {
+    /// 呼び出し番号タグのESC/POSコマンドを生成（品目情報付き）
+    fn generate_tag(
+        &self,
+        path: &std::path::PathBuf,
+        tag: &str,
+        ff_ketchup: u32,
+        ff_no_ketchup: u32,
+        book: u32,
+        pdf_book: u32,
+        drink: u32,
+    ) -> anyhow::Result<()> {
         // ファイルを作成
         std::fs::File::create(path).context("Failed to create tag file")?;
 
@@ -193,87 +218,401 @@ impl ReceiptPrinter {
         let driver =
             escpos::driver::FileDriver::open(path).context("Failed to open file driver")?;
 
-        // プリンターを初期化
-        escpos::printer::Printer::new(
+        // プリンターを初期化して、ヘッダー部分を作成
+        let mut printer = escpos::printer::Printer::new(
             driver,
             Default::default(),
             Some(escpos::printer_options::PrinterOptions::default()),
-        )
-        .init()
-        .context("Failed to init printer")?
-        .justify(escpos::utils::JustifyMode::CENTER)
-        .context("Failed to set justify")?
-        .bit_image_option(
-            "./img/npo_top.png",
-            escpos::utils::BitImageOption::new(
-                Some(400),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/white.png",
-            escpos::utils::BitImageOption::new(
-                Some(640),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/callnumber.png",
-            escpos::utils::BitImageOption::new(
-                Some(320),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/white.png",
-            escpos::utils::BitImageOption::new(
-                Some(480),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .size(3, 4)?
-        .writeln(&format!("[ {} ]", tag))
-        .context("Failed to write tag")?
-        .bit_image_option(
-            "./img/white.png",
-            escpos::utils::BitImageOption::new(
-                Some(480),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/orders.png",
-            escpos::utils::BitImageOption::new(
-                Some(320),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/signage.png",
-            escpos::utils::BitImageOption::new(
-                Some(600),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .bit_image_option(
-            "./img/drink.png",
-            escpos::utils::BitImageOption::new(
-                Some(600),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .feed()
-        .context("Failed to feed")?
-        .print_cut()
-        .context("Failed to cut")?;
+        );
+
+        printer
+            .init()
+            .context("Failed to init printer")?
+            .justify(escpos::utils::JustifyMode::CENTER)
+            .context("Failed to set justify")?
+            .bit_image_option(
+                "./img/npo_top.png",
+                escpos::utils::BitImageOption::new(
+                    Some(400),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(640),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/callnumber.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(480),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .size(3, 4)?
+            .writeln(&format!("[ {} ]", tag))
+            .context("Failed to write tag")?
+            .size(1, 1)?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+
+        // 各品目の画像を数量に応じて追加（0個の品目はスキップ）
+
+        // フライドポテト（ケチャップあり）
+        if ff_ketchup > 0 {
+            let img_path = format!("./img/ffketchup/line_{}.png", ff_ketchup);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // フライドポテト（ケチャップなし）
+        if ff_no_ketchup > 0 {
+            let img_path = format!("./img/ffnoketchup/line_{}.png", ff_no_ketchup);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // 物理本（10ずつ分割: book_phys_1, book_phys_2, book_phys_3）
+        let mut remaining = book;
+        let mut batch = 1;
+        while remaining > 0 && batch <= 3 {
+            let count_in_batch = std::cmp::min(remaining, 10);
+            let img_path = format!("./img/book_phys_{}/line_{}.png", batch, count_in_batch);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+
+            remaining -= count_in_batch;
+            batch += 1;
+        }
+
+        // PDFの本
+        if pdf_book > 0 {
+            let img_path = format!("./img/book_pdf/line_{}.png", pdf_book);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // 飲み物
+        if drink > 0 {
+            let img_path = format!("./img/drink/line_{}.png", drink);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // フッター画像を追加して印刷完了
+        printer
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/orders.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/signage.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/drink.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .feed()
+            .context("Failed to feed")?
+            .print_cut()
+            .context("Failed to cut")?;
+
+        Ok(())
+    }
+
+    /// 注文レシートを印刷（品目情報 + 合計金額付き）
+    pub async fn print_order_receipt(
+        &self,
+        tag: &str,
+        ff_ketchup: u32,
+        ff_no_ketchup: u32,
+        book: u32,
+        pdf_book: u32,
+        drink: u32,
+        total: u32,
+    ) -> anyhow::Result<()> {
+        // receiptsディレクトリを作成
+        tokio::fs::create_dir_all(&self.receipts_dir)
+            .await
+            .context("Failed to create receipts directory")?;
+
+        // ESC/POSバイナリファイルのパス（タグ名を使用）
+        let receipt_filename = format!("order_{}.bin", tag);
+        let receipt_path = self.receipts_dir.join(&receipt_filename);
+
+        // ESC/POSコマンドを生成
+        self.generate_order_receipt(
+            &receipt_path,
+            tag,
+            ff_ketchup,
+            ff_no_ketchup,
+            book,
+            pdf_book,
+            drink,
+            total,
+        )?;
+
+        // lprコマンドで印刷ジョブをキューイング
+        self.send_to_printer(&receipt_path).await?;
+
+        println!("✓ Order receipt printed: {}", receipt_filename);
+
+        Ok(())
+    }
+
+    /// 注文レシートのESC/POSコマンドを生成（品目情報 + 合計金額付き）
+    fn generate_order_receipt(
+        &self,
+        path: &std::path::PathBuf,
+        tag: &str,
+        ff_ketchup: u32,
+        ff_no_ketchup: u32,
+        book: u32,
+        pdf_book: u32,
+        drink: u32,
+        total: u32,
+    ) -> anyhow::Result<()> {
+        // ファイルを作成
+        std::fs::File::create(path).context("Failed to create order receipt file")?;
+
+        // ESC/POSドライバを初期化
+        let driver =
+            escpos::driver::FileDriver::open(path).context("Failed to open file driver")?;
+
+        // プリンターを初期化して、ヘッダー部分を作成
+        let mut printer = escpos::printer::Printer::new(
+            driver,
+            Default::default(),
+            Some(escpos::printer_options::PrinterOptions::default()),
+        );
+
+        printer
+            .init()
+            .context("Failed to init printer")?
+            .justify(escpos::utils::JustifyMode::CENTER)
+            .context("Failed to set justify")?
+            .bit_image_option(
+                "./img/npo_top.png",
+                escpos::utils::BitImageOption::new(
+                    Some(400),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(400),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .size(2, 2)?
+            .writeln(&format!("Order #{}", tag))
+            .context("Failed to write order header")?
+            .size(1, 1)?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+
+        // 各品目の画像を数量に応じて追加（0個の品目はスキップ）
+
+        // フランクフルト（ケチャップあり）
+        if ff_ketchup > 0 {
+            let img_path = format!("./img/ffketchup/line_{}.png", ff_ketchup);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // フランクフルト（ケチャップなし）
+        if ff_no_ketchup > 0 {
+            let img_path = format!("./img/ffnoketchup/line_{}.png", ff_no_ketchup);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // 物理本（10ずつ分割: book_phys_1, book_phys_2, book_phys_3）
+        let mut remaining = book;
+        let mut batch = 1;
+        while remaining > 0 && batch <= 3 {
+            let count_in_batch = std::cmp::min(remaining, 10);
+            let img_path = format!("./img/book_phys_{}/line_{}.png", batch, count_in_batch);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+
+            remaining -= count_in_batch;
+            batch += 1;
+        }
+
+        // PDFの本
+        if pdf_book > 0 {
+            let img_path = format!("./img/book_pdf/line_{}.png", pdf_book);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // 飲み物
+        if drink > 0 {
+            let img_path = format!("./img/drink/line_{}.png", drink);
+            printer.bit_image_option(
+                &img_path,
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?;
+        }
+
+        // 合計金額とフッター画像を追加して印刷完了
+        printer
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .size(2, 2)?
+            .writeln(&format!("Total: {} yen", total))
+            .context("Failed to write total")?
+            .size(1, 1)?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/orders.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/signage.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/drink.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .feed()
+            .context("Failed to feed")?
+            .print_cut()
+            .context("Failed to cut")?;
 
         Ok(())
     }

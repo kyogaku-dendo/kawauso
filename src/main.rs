@@ -23,6 +23,17 @@ struct PrintPdfRequest {
 #[derive(serde::Deserialize)]
 struct PrintTagRequest {
     tag: String,
+    #[serde(rename = "ffKetchup")]
+    ff_ketchup: u32,
+    #[serde(rename = "ffNoKetchup")]
+    ff_no_ketchup: u32,
+    book: u32,
+    #[serde(rename = "pdfBook")]
+    pdf_book: u32,
+    drink: u32,
+    total: u32,
+    #[serde(rename = "isOrder")]
+    is_order: bool,
 }
 
 #[derive(serde::Serialize)]
@@ -159,23 +170,71 @@ async fn print_tag(
     state: actix_web::web::Data<AppState>,
     req: actix_web::web::Json<PrintTagRequest>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    println!("\nPrint tag request - Tag: {}", req.tag);
+    println!(
+        "\nPrint tag/receipt request - Tag: {}, isOrder: {}",
+        req.tag, req.is_order
+    );
+    println!(
+        "  ffKetchup: {}, ffNoKetchup: {}, book: {}, pdfBook: {}, drink: {}, total: {}",
+        req.ff_ketchup, req.ff_no_ketchup, req.book, req.pdf_book, req.drink, req.total
+    );
 
-    // 呼び出し番号タグを印刷
-    if let Err(e) = state.receipt_printer.print_tag_receipt(&req.tag).await {
-        eprintln!("⚠️ Failed to print tag: {}", e);
-        return Ok(
-            actix_web::HttpResponse::InternalServerError().json(PrintTagResponse {
-                success: false,
-                message: format!("Failed to print tag: {}", e),
-            }),
-        );
+    if req.is_order {
+        // タグを印刷（品目情報付き）
+        if let Err(e) = state
+            .receipt_printer
+            .print_tag_receipt(
+                &req.tag,
+                req.ff_ketchup,
+                req.ff_no_ketchup,
+                req.book,
+                req.pdf_book,
+                req.drink,
+            )
+            .await
+        {
+            eprintln!("⚠️ Failed to print tag: {}", e);
+            return Ok(
+                actix_web::HttpResponse::InternalServerError().json(PrintTagResponse {
+                    success: false,
+                    message: format!("Failed to print tag: {}", e),
+                }),
+            );
+        }
+
+        Ok(actix_web::HttpResponse::Ok().json(PrintTagResponse {
+            success: true,
+            message: format!("Tag print job queued: {}", req.tag),
+        }))
+    } else {
+        // レシートを印刷（各品目の数量付き）
+        if let Err(e) = state
+            .receipt_printer
+            .print_order_receipt(
+                &req.tag,
+                req.ff_ketchup,
+                req.ff_no_ketchup,
+                req.book,
+                req.pdf_book,
+                req.drink,
+                req.total,
+            )
+            .await
+        {
+            eprintln!("⚠️ Failed to print receipt: {}", e);
+            return Ok(
+                actix_web::HttpResponse::InternalServerError().json(PrintTagResponse {
+                    success: false,
+                    message: format!("Failed to print receipt: {}", e),
+                }),
+            );
+        }
+
+        Ok(actix_web::HttpResponse::Ok().json(PrintTagResponse {
+            success: true,
+            message: format!("Receipt print job queued: {}", req.tag),
+        }))
     }
-
-    Ok(actix_web::HttpResponse::Ok().json(PrintTagResponse {
-        success: true,
-        message: format!("Tag print job queued: {}", req.tag),
-    }))
 }
 
 async fn cut_paper(
