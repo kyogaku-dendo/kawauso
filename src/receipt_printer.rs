@@ -33,7 +33,7 @@ impl ReceiptPrinter {
         let receipt_path = self.receipts_dir.join(&receipt_filename);
 
         // ESC/POSコマンドを生成
-        self.generate_receipt(&receipt_path, pdf_url, pdf_id, payment_id, paid_at, _count)?;
+        self.generate_receipt(&receipt_path, pdf_url, pdf_id, paid_at, _count)?;
 
         // lprコマンドで印刷ジョブをキューイング
         self.send_to_printer(&receipt_path).await?;
@@ -49,7 +49,6 @@ impl ReceiptPrinter {
         path: &std::path::PathBuf,
         pdf_url: &str,
         pdf_id: &str,
-        payment_id: &str,
         paid_at: u64,
         _count: u32,
     ) -> anyhow::Result<()> {
@@ -114,8 +113,6 @@ impl ReceiptPrinter {
         )?
         .writeln(&format!("PDF ID: {}", &pdf_id[..8]))
         .context("Failed to write PDF ID")?
-        .writeln(&format!("Payment ID: {}", &payment_id[..8]))
-        .context("Failed to write payment ID")?
         .bit_image_option(
             "./img/white.png",
             escpos::utils::BitImageOption::new(
@@ -124,16 +121,6 @@ impl ReceiptPrinter {
                 escpos::utils::BitImageSize::Normal,
             )?,
         )?
-        .bit_image_option(
-            "./img/date.png",
-            escpos::utils::BitImageOption::new(
-                Some(200),
-                None,
-                escpos::utils::BitImageSize::Normal,
-            )?,
-        )?
-        .writeln(&paid_at_display)
-        .context("Failed to write paid at")?
         .writeln("Thank you!")
         .context("Failed to write footer")?
         .feed()
@@ -273,6 +260,22 @@ impl ReceiptPrinter {
                     None,
                     escpos::utils::BitImageSize::Normal,
                 )?,
+            )?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/orders.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
             )?;
 
         // 各品目の画像を数量に応じて追加（0個の品目はスキップ）
@@ -353,15 +356,7 @@ impl ReceiptPrinter {
             .bit_image_option(
                 "./img/white.png",
                 escpos::utils::BitImageOption::new(
-                    Some(320),
-                    None,
-                    escpos::utils::BitImageSize::Normal,
-                )?,
-            )?
-            .bit_image_option(
-                "./img/orders.png",
-                escpos::utils::BitImageOption::new(
-                    Some(320),
+                    Some(400),
                     None,
                     escpos::utils::BitImageSize::Normal,
                 )?,
@@ -469,20 +464,42 @@ impl ReceiptPrinter {
                     escpos::utils::BitImageSize::Normal,
                 )?,
             )?
+            .size(2, 2)?
             .bit_image_option(
                 "./img/white.png",
                 escpos::utils::BitImageOption::new(
-                    Some(400),
+                    Some(320),
                     None,
                     escpos::utils::BitImageSize::Normal,
                 )?,
             )?
-            .size(2, 2)?
-            .writeln(&format!("Order #{}", tag))
-            .context("Failed to write order header")?
+            .bit_image_option(
+                "./img/three.png",
+                escpos::utils::BitImageOption::new(
+                    Some(600),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
             .size(1, 1)?
             .bit_image_option(
                 "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(240),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/white.png",
+                escpos::utils::BitImageOption::new(
+                    Some(320),
+                    None,
+                    escpos::utils::BitImageSize::Normal,
+                )?,
+            )?
+            .bit_image_option(
+                "./img/orders.png",
                 escpos::utils::BitImageOption::new(
                     Some(320),
                     None,
@@ -580,35 +597,13 @@ impl ReceiptPrinter {
             .bit_image_option(
                 "./img/white.png",
                 escpos::utils::BitImageOption::new(
-                    Some(320),
+                    Some(400),
                     None,
                     escpos::utils::BitImageSize::Normal,
                 )?,
             )?
-            .bit_image_option(
-                "./img/orders.png",
-                escpos::utils::BitImageOption::new(
-                    Some(320),
-                    None,
-                    escpos::utils::BitImageSize::Normal,
-                )?,
-            )?
-            .bit_image_option(
-                "./img/signage.png",
-                escpos::utils::BitImageOption::new(
-                    Some(600),
-                    None,
-                    escpos::utils::BitImageSize::Normal,
-                )?,
-            )?
-            .bit_image_option(
-                "./img/drink.png",
-                escpos::utils::BitImageOption::new(
-                    Some(600),
-                    None,
-                    escpos::utils::BitImageSize::Normal,
-                )?,
-            )?
+            .writeln("Thank you!")
+            .context("Failed to write footer")?
             .feed()
             .context("Failed to feed")?
             .print_cut()
